@@ -1,0 +1,30 @@
+# 환경 변수 (비밀키 등)
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+.venv/
+*.egg-info/
+.eggs/
+.pytest_cache/
+.mypy_cache/
+
+# 로그
+*.log
+
+# IDE
+.idea/
+.vscode/
+.cursor/
+
+# 기타
+.DS_Store
+Thumbs.db
+*.bak

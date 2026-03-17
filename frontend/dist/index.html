@@ -1,0 +1,1238 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>매크로 이벤트 지식 그래프</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  --bg: #0a0e17;
+  --surface: #131a2b;
+  --surface2: #1a2340;
+  --border: #2a3555;
+  --text: #e0e6f0;
+  --text2: #8899bb;
+  --accent: #4fc3f7;
+  --accent2: #7c4dff;
+  --green: #66bb6a;
+  --red: #ef5350;
+  --orange: #ffa726;
+  --gold: #ffd54f;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  overflow: hidden;
+  height: 100vh;
+}
+
+/* ── 헤더 ── */
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 24px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  z-index: 100;
+  position: relative;
+}
+
+.header h1 {
+  font-size: 18px;
+  font-weight: 700;
+  background: linear-gradient(135deg, var(--accent), var(--accent2));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.header-controls {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.search-box {
+  display: flex;
+  align-items: center;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 12px;
+}
+
+.search-box input {
+  background: none;
+  border: none;
+  color: var(--text);
+  font-size: 14px;
+  width: 200px;
+  outline: none;
+}
+
+.search-box input::placeholder { color: var(--text2); }
+
+.search-box button {
+  background: none;
+  border: none;
+  color: var(--accent);
+  cursor: pointer;
+  font-size: 16px;
+}
+
+.period-btns {
+  display: flex;
+  gap: 4px;
+}
+
+.period-btns button {
+  padding: 6px 14px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface2);
+  color: var(--text2);
+  cursor: pointer;
+  font-size: 13px;
+  transition: all 0.2s;
+}
+
+.period-btns button.active {
+  background: var(--accent);
+  color: var(--bg);
+  border-color: var(--accent);
+  font-weight: 600;
+}
+
+.btn {
+  padding: 6px 16px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface2);
+  color: var(--text);
+  cursor: pointer;
+  font-size: 13px;
+  transition: all 0.2s;
+}
+
+.btn:hover { border-color: var(--accent); color: var(--accent); }
+
+.btn-primary {
+  background: linear-gradient(135deg, var(--accent), var(--accent2));
+  border: none;
+  color: white;
+  font-weight: 600;
+}
+
+/* ── 메인 레이아웃 ── */
+.main {
+  display: flex;
+  height: calc(100vh - 56px);
+}
+
+/* ── 사이드바 ── */
+.sidebar {
+  width: 320px;
+  min-width: 320px;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  overflow-y: auto;
+  padding: 16px;
+}
+
+.sidebar::-webkit-scrollbar { width: 6px; }
+.sidebar::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+.stat-card {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  text-align: center;
+}
+
+.stat-card .value {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.stat-card .label {
+  font-size: 11px;
+  color: var(--text2);
+  margin-top: 4px;
+}
+
+.section-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text2);
+  margin: 16px 0 8px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.rank-list {
+  list-style: none;
+}
+
+.rank-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.rank-item:hover { background: var(--surface2); }
+
+.rank-num {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--surface2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text2);
+}
+
+.rank-item:nth-child(1) .rank-num { background: var(--gold); color: var(--bg); }
+.rank-item:nth-child(2) .rank-num { background: #90a4ae; color: var(--bg); }
+.rank-item:nth-child(3) .rank-num { background: #a1887f; color: var(--bg); }
+
+.rank-name {
+  flex: 1;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.rank-score {
+  font-size: 12px;
+  color: var(--text2);
+}
+
+.asset-badge {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  margin-left: 4px;
+}
+
+.asset-badge.commodity { background: #ff980022; color: var(--orange); }
+.asset-badge.stock_kr { background: #4fc3f722; color: var(--accent); }
+.asset-badge.index { background: #7c4dff22; color: var(--accent2); }
+.asset-badge.currency { background: #66bb6a22; color: var(--green); }
+.asset-badge.crypto { background: #ffd54f22; color: var(--gold); }
+
+/* ── 그래프 영역 ── */
+.graph-container {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+}
+
+svg { width: 100%; height: 100%; }
+
+.link {
+  stroke: #2a3555;
+  stroke-opacity: 0.6;
+}
+
+.link.highlighted {
+  stroke: var(--accent);
+  stroke-opacity: 1;
+}
+
+.node-circle {
+  cursor: pointer;
+  stroke: var(--bg);
+  stroke-width: 1.5px;
+  transition: stroke 0.2s;
+}
+
+.node-circle:hover { stroke: white; stroke-width: 2.5px; }
+
+.node-circle.asset {
+  stroke: var(--gold);
+  stroke-width: 2px;
+}
+
+.node-label {
+  fill: var(--text);
+  font-size: 11px;
+  pointer-events: none;
+  text-anchor: middle;
+  font-weight: 500;
+  text-shadow: 0 0 4px var(--bg), 0 0 8px var(--bg);
+}
+
+/* ── 팝업 / 디테일 패널 ── */
+.detail-panel {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  width: 340px;
+  max-height: calc(100vh - 100px);
+  overflow-y: auto;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px;
+  display: none;
+  z-index: 50;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+}
+
+.detail-panel.visible { display: block; }
+
+.detail-panel::-webkit-scrollbar { width: 4px; }
+.detail-panel::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+.detail-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.detail-header h2 {
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.close-btn {
+  background: none;
+  border: none;
+  color: var(--text2);
+  font-size: 20px;
+  cursor: pointer;
+}
+
+.detail-section {
+  margin-bottom: 16px;
+}
+
+.detail-section h3 {
+  font-size: 13px;
+  color: var(--text2);
+  margin-bottom: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.connected-item {
+  display: flex;
+  justify-content: space-between;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+}
+
+.connected-item:last-child { border: none; }
+
+.return-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 8px;
+}
+
+.return-card {
+  background: var(--surface2);
+  border-radius: 8px;
+  padding: 12px;
+  text-align: center;
+}
+
+.return-card .period { font-size: 11px; color: var(--text2); }
+.return-card .value {
+  font-size: 18px;
+  font-weight: 700;
+  margin-top: 4px;
+}
+
+.return-card .value.positive { color: var(--red); }
+.return-card .value.negative { color: var(--accent); }
+
+.article-item {
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.article-item:last-child { border: none; }
+
+.article-item a {
+  color: var(--accent);
+  text-decoration: none;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.article-item a:hover { text-decoration: underline; }
+
+.article-meta {
+  font-size: 11px;
+  color: var(--text2);
+  margin-top: 2px;
+}
+
+/* ── 체인/경로 탐색 패널 ── */
+.chain-panel {
+  position: absolute;
+  bottom: 60px; left: 50%;
+  transform: translateX(-50%);
+  width: 580px; max-height: 360px;
+  overflow-y: auto;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px 20px;
+  z-index: 150;
+  display: none;
+}
+.chain-panel.visible { display: block; }
+.chain-panel-header {
+  display: flex; align-items: center;
+  justify-content: space-between; margin-bottom: 12px;
+}
+.chain-panel-header h3 { font-size: 13px; color: var(--accent); }
+.chain-close { background: none; border: none; color: var(--text2); cursor: pointer; font-size: 18px; }
+.chain-tabs { display: flex; gap: 8px; margin-bottom: 12px; }
+.chain-tab {
+  padding: 4px 12px; border-radius: 6px; font-size: 12px; cursor: pointer;
+  border: 1px solid var(--border); background: none; color: var(--text2);
+}
+.chain-tab.active { border-color: var(--accent2); color: var(--accent2); background: rgba(124,77,255,0.1); }
+.chain-path {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 6px;
+  padding: 10px; background: var(--surface2); border-radius: 8px; margin-bottom: 10px;
+}
+.chain-node {
+  padding: 4px 12px; background: var(--surface);
+  border: 1px solid var(--border); border-radius: 6px;
+  font-size: 13px; cursor: pointer; white-space: nowrap;
+}
+.chain-node:hover { border-color: var(--accent); color: var(--accent); }
+.chain-node.root { border-color: var(--accent2); color: var(--accent2); font-weight: 700; }
+.chain-node.causal { border-color: var(--orange); color: var(--orange); }
+.chain-arrow { color: var(--text2); font-size: 14px; }
+.chain-meta { font-size: 10px; color: var(--text2); }
+.chain-level { margin-bottom: 8px; }
+.chain-level-title { font-size: 11px; color: var(--text2); margin-bottom: 4px; }
+.chain-items { display: flex; flex-wrap: wrap; gap: 6px; }
+.chain-item {
+  display: flex; align-items: center; gap: 4px;
+  padding: 3px 8px; background: var(--surface2);
+  border: 1px solid var(--border); border-radius: 5px;
+  font-size: 12px; cursor: pointer;
+}
+.chain-item:hover { border-color: var(--accent); }
+.chain-item .score { font-size: 10px; color: var(--text2); }
+.chain-path-input {
+  display: flex; gap: 8px; align-items: center; margin-bottom: 10px;
+}
+.chain-path-input input {
+  flex: 1; background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 6px; padding: 6px 10px; color: var(--text); font-size: 13px;
+}
+.chain-path-input button {
+  padding: 6px 14px; border-radius: 6px; border: none;
+  background: var(--accent2); color: #fff; cursor: pointer; font-size: 12px;
+}
+
+/* ── AI 설명 ── */
+.explain-btn {
+  background: none;
+  border: 1px solid var(--accent2);
+  color: var(--accent2);
+  border-radius: 4px;
+  padding: 2px 8px;
+  font-size: 11px;
+  cursor: pointer;
+  margin-left: 8px;
+  transition: background 0.2s;
+  white-space: nowrap;
+}
+.explain-btn:hover { background: rgba(124,77,255,0.15); }
+.explain-btn:disabled { opacity: 0.4; cursor: default; }
+
+.explain-box {
+  margin-top: 6px;
+  padding: 10px 12px;
+  background: rgba(124,77,255,0.08);
+  border-left: 3px solid var(--accent2);
+  border-radius: 0 6px 6px 0;
+  font-size: 12px;
+  color: var(--text);
+  line-height: 1.6;
+  display: none;
+}
+.explain-box.visible { display: block; }
+.explain-box .explain-src {
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--text2);
+}
+
+/* ── 로딩 오버레이 ── */
+.loading {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(10, 14, 23, 0.9);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+}
+
+.loading.hidden { display: none; }
+
+.spinner {
+  width: 48px;
+  height: 48px;
+  border: 4px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.loading-text {
+  margin-top: 16px;
+  color: var(--text2);
+  font-size: 14px;
+}
+
+/* ── 줌 컨트롤 ── */
+.zoom-controls {
+  position: absolute;
+  bottom: 20px;
+  right: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.zoom-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-size: 18px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.zoom-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+/* ── 상태바 ── */
+.status-bar {
+  position: absolute;
+  bottom: 20px;
+  left: 20px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 16px;
+  font-size: 12px;
+  color: var(--text2);
+}
+
+/* ── 토스트 ── */
+.toast {
+  position: fixed;
+  top: 80px;
+  right: 24px;
+  background: var(--surface);
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  padding: 12px 20px;
+  color: var(--text);
+  font-size: 13px;
+  z-index: 300;
+  transform: translateX(120%);
+  transition: transform 0.3s;
+}
+
+.toast.show { transform: translateX(0); }
+</style>
+</head>
+<body>
+<!-- 헤더 -->
+<div class="header">
+  <h1>MACRO EVENT KNOWLEDGE GRAPH</h1>
+  <div class="header-controls">
+    <div class="search-box">
+      <input type="text" id="searchInput" placeholder="키워드 검색 (예: 후티, 금, 반도체)">
+      <button onclick="doSearch()">🔍</button>
+    </div>
+    <div class="period-btns">
+      <button class="active" data-period="1m" onclick="setPeriod('1m', this)">1개월</button>
+      <button data-period="3m" onclick="setPeriod('3m', this)">3개월</button>
+      <button data-period="all" onclick="setPeriod('all', this)">전체</button>
+    </div>
+    <button class="btn btn-primary" onclick="runPipeline()">⚡ 데이터 수집</button>
+    <button class="btn" onclick="refreshGraph()">🔄 새로고침</button>
+    <a href="/causal_explorer.html" class="btn" style="text-decoration:none">🔗 인과 탐색기</a>
+  </div>
+</div>
+
+<!-- 메인 -->
+<div class="main">
+  <!-- 사이드바 -->
+  <div class="sidebar">
+    <div class="stats-grid">
+      <div class="stat-card"><div class="value" id="statArticles">-</div><div class="label">기사</div></div>
+      <div class="stat-card"><div class="value" id="statNodes">-</div><div class="label">노드</div></div>
+      <div class="stat-card"><div class="value" id="statEdges">-</div><div class="label">엣지</div></div>
+      <div class="stat-card"><div class="value" id="statNouns">-</div><div class="label">명사</div></div>
+    </div>
+
+    <div class="section-title">중심성 TOP 20</div>
+    <ul class="rank-list" id="rankList"></ul>
+  </div>
+
+  <!-- 그래프 -->
+  <div class="graph-container" id="graphContainer">
+    <svg id="graphSvg"></svg>
+
+    <!-- 노드 디테일 패널 -->
+    <div class="detail-panel" id="detailPanel">
+      <div class="detail-header">
+        <h2 id="detailTitle"></h2>
+        <button class="close-btn" onclick="closeDetail()">✕</button>
+      </div>
+      <div id="detailContent"></div>
+    </div>
+
+    <!-- 체인/경로 탐색 패널 -->
+    <div class="chain-panel" id="chainPanel">
+      <div class="chain-panel-header">
+        <h3 id="chainPanelTitle">체인 탐색</h3>
+        <button class="chain-close" onclick="closeChainPanel()">✕</button>
+      </div>
+      <div class="chain-tabs">
+        <button class="chain-tab active" id="tabChain" onclick="switchChainTab('chain')">🔗 연결 체인</button>
+        <button class="chain-tab" id="tabCausal" onclick="switchChainTab('causal')">⚡ 인과 체인</button>
+        <button class="chain-tab" id="tabPath" onclick="switchChainTab('path')">🗺 경로 탐색</button>
+      </div>
+      <div id="chainContent"></div>
+    </div>
+
+    <!-- 줌 -->
+    <div class="zoom-controls">
+      <button class="zoom-btn" onclick="zoomIn()">+</button>
+      <button class="zoom-btn" onclick="zoomOut()">−</button>
+      <button class="zoom-btn" onclick="zoomReset()">⟲</button>
+    </div>
+
+    <!-- 상태바 -->
+    <div class="status-bar" id="statusBar">데이터를 로드하세요</div>
+  </div>
+</div>
+
+<!-- 로딩 -->
+<div class="loading hidden" id="loadingOverlay">
+  <div class="spinner"></div>
+  <div class="loading-text" id="loadingText">데이터 수집 중...</div>
+</div>
+
+<!-- 토스트 -->
+<div class="toast" id="toast"></div>
+
+<script>
+const API = '';  // same origin
+let currentPeriod = '1m';
+let currentSearch = null;
+let simulation = null;
+let svgG = null;
+let zoom = null;
+
+// ══════════════════════════════════════════════════════════════
+//  초기화
+// ══════════════════════════════════════════════════════════════
+document.addEventListener('DOMContentLoaded', () => {
+  initSvg();
+  loadStats();
+  loadCentrality();
+  loadGraph();
+
+  document.getElementById('searchInput').addEventListener('keydown', e => {
+    if (e.key === 'Enter') doSearch();
+  });
+});
+
+function initSvg() {
+  const svg = d3.select('#graphSvg');
+  const container = document.getElementById('graphContainer');
+
+  zoom = d3.zoom()
+    .scaleExtent([0.1, 8])
+    .on('zoom', (event) => svgG.attr('transform', event.transform));
+
+  svg.call(zoom);
+  svgG = svg.append('g');
+}
+
+// ══════════════════════════════════════════════════════════════
+//  API 호출
+// ══════════════════════════════════════════════════════════════
+async function api(path, method = 'GET') {
+  const resp = await fetch(API + path, { method });
+  return resp.json();
+}
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 3000);
+}
+
+function showLoading(text) {
+  document.getElementById('loadingText').textContent = text;
+  document.getElementById('loadingOverlay').classList.remove('hidden');
+}
+
+function hideLoading() {
+  document.getElementById('loadingOverlay').classList.add('hidden');
+}
+
+// ══════════════════════════════════════════════════════════════
+//  통계 & 중심성
+// ══════════════════════════════════════════════════════════════
+async function loadStats() {
+  try {
+    const data = await api('/api/stats');
+    document.getElementById('statArticles').textContent = data.articles?.toLocaleString() || '0';
+    document.getElementById('statNodes').textContent = data.nodes?.toLocaleString() || '0';
+    document.getElementById('statEdges').textContent = data.edges?.toLocaleString() || '0';
+    document.getElementById('statNouns').textContent = data.uniqueNouns?.toLocaleString() || '0';
+  } catch(e) { console.log('Stats load error', e); }
+}
+
+async function loadCentrality() {
+  try {
+    const data = await api('/api/centrality?top_n=20');
+    const list = document.getElementById('rankList');
+    list.innerHTML = '';
+
+    (data.centrality || []).forEach((item, i) => {
+      const li = document.createElement('li');
+      li.className = 'rank-item';
+      li.onclick = () => searchNode(item.noun);
+
+      let badge = '';
+      const assetTypes = {
+        'commodity': '원자재', 'stock_kr': '주식', 'index': '지수',
+        'index_kr': '지수', 'currency': '통화', 'crypto': '크립토'
+      };
+
+      // ASSET_NODES는 백엔드에만 있으므로 간단히 표시
+      li.innerHTML = `
+        <span class="rank-num">${i + 1}</span>
+        <span class="rank-name">${item.noun}</span>
+        <span class="rank-score">${item.count}</span>
+      `;
+      list.appendChild(li);
+    });
+  } catch(e) { console.log('Centrality load error', e); }
+}
+
+// ══════════════════════════════════════════════════════════════
+//  그래프 렌더링
+// ══════════════════════════════════════════════════════════════
+async function loadGraph() {
+  let url = `/api/graph?period=${currentPeriod}&limit=200`;
+  if (currentSearch) url += `&search=${encodeURIComponent(currentSearch)}`;
+
+  try {
+    const data = await api(url);
+    renderGraph(data);
+    document.getElementById('statusBar').textContent =
+      `노드 ${data.meta.nodeCount} | 엣지 ${data.meta.linkCount} | ${currentPeriod === 'all' ? '전체' : currentPeriod === '1m' ? '1개월' : '3개월'}`;
+  } catch(e) {
+    console.error('Graph load error:', e);
+    document.getElementById('statusBar').textContent = '그래프 로드 실패 — 먼저 데이터를 수집하세요';
+  }
+}
+
+function renderGraph(data) {
+  const container = document.getElementById('graphContainer');
+  const width = container.clientWidth;
+  const height = container.clientHeight;
+
+  // 기존 요소 제거
+  svgG.selectAll('*').remove();
+
+  if (!data.nodes || data.nodes.length === 0) {
+    svgG.append('text')
+      .attr('x', width / 2).attr('y', height / 2)
+      .attr('text-anchor', 'middle')
+      .attr('fill', '#8899bb')
+      .attr('font-size', 16)
+      .text('데이터가 없습니다. "⚡ 데이터 수집" 버튼을 눌러주세요');
+    return;
+  }
+
+  // 스케일
+  const countExtent = d3.extent(data.nodes, d => d.count);
+  const rScale = d3.scaleSqrt()
+    .domain(countExtent[0] === countExtent[1] ? [0, countExtent[1]] : countExtent)
+    .range([5, 35]);
+
+  const scoreExtent = d3.extent(data.links, d => d.score);
+  const wScale = d3.scaleLinear()
+    .domain(scoreExtent[0] === scoreExtent[1] ? [0, scoreExtent[1] || 1] : scoreExtent)
+    .range([0.5, 5]);
+
+  const colorScale = d3.scaleOrdinal()
+    .domain(['commodity', 'stock_kr', 'index', 'index_kr', 'currency', 'crypto', null])
+    .range(['#ffa726', '#4fc3f7', '#7c4dff', '#7c4dff', '#66bb6a', '#ffd54f', '#546e7a']);
+
+  // 엣지
+  const link = svgG.append('g')
+    .selectAll('line')
+    .data(data.links)
+    .join('line')
+    .attr('class', 'link')
+    .attr('stroke-width', d => wScale(d.score));
+
+  // 노드 그룹
+  const nodeG = svgG.append('g')
+    .selectAll('g')
+    .data(data.nodes)
+    .join('g')
+    .call(d3.drag()
+      .on('start', dragStart)
+      .on('drag', dragging)
+      .on('end', dragEnd));
+
+  // 노드 원
+  nodeG.append('circle')
+    .attr('class', d => `node-circle ${d.isAsset ? 'asset' : ''}`)
+    .attr('r', d => rScale(d.count))
+    .attr('fill', d => colorScale(d.assetType))
+    .attr('opacity', 0.85)
+    .on('click', (event, d) => onNodeClick(d))
+    .on('mouseover', (event, d) => onNodeHover(d, data, link, nodeG))
+    .on('mouseout', () => onNodeOut(link, nodeG));
+
+  // 라벨 (큰 노드만)
+  const medianCount = d3.median(data.nodes, d => d.count) || 1;
+  nodeG.filter(d => d.count >= medianCount * 0.5)
+    .append('text')
+    .attr('class', 'node-label')
+    .attr('dy', d => rScale(d.count) + 14)
+    .text(d => d.noun);
+
+  // 시뮬레이션
+  if (simulation) simulation.stop();
+
+  simulation = d3.forceSimulation(data.nodes)
+    .force('link', d3.forceLink(data.links).id(d => d.id).distance(80).strength(0.3))
+    .force('charge', d3.forceManyBody().strength(-150).distanceMax(400))
+    .force('center', d3.forceCenter(width / 2, height / 2))
+    .force('collision', d3.forceCollide().radius(d => rScale(d.count) + 5))
+    .on('tick', () => {
+      link
+        .attr('x1', d => d.source.x).attr('y1', d => d.source.y)
+        .attr('x2', d => d.target.x).attr('y2', d => d.target.y);
+      nodeG.attr('transform', d => `translate(${d.x},${d.y})`);
+    });
+}
+
+// ── 인터랙션 ──
+function onNodeHover(d, data, link, nodeG) {
+  const connectedIds = new Set();
+  connectedIds.add(d.id);
+
+  link.each(function(l) {
+    if (l.source.id === d.id || l.target.id === d.id) {
+      connectedIds.add(l.source.id);
+      connectedIds.add(l.target.id);
+    }
+  });
+
+  link.attr('stroke-opacity', l =>
+    (l.source.id === d.id || l.target.id === d.id) ? 1 : 0.05
+  ).attr('stroke', l =>
+    (l.source.id === d.id || l.target.id === d.id) ? '#4fc3f7' : '#2a3555'
+  );
+
+  nodeG.select('circle').attr('opacity', n => connectedIds.has(n.id) ? 1 : 0.1);
+  nodeG.select('text').attr('opacity', n => connectedIds.has(n.id) ? 1 : 0.05);
+}
+
+function onNodeOut(link, nodeG) {
+  link.attr('stroke-opacity', 0.6).attr('stroke', '#2a3555');
+  nodeG.select('circle').attr('opacity', 0.85);
+  nodeG.select('text').attr('opacity', 1);
+}
+
+async function onNodeClick(d) {
+  try {
+    const detail = await api(`/api/node/${d.id}`);
+    showDetail(detail);
+  } catch(e) {
+    console.error('Node detail error:', e);
+  }
+}
+
+function showDetail(detail) {
+  const panel = document.getElementById('detailPanel');
+  const title = document.getElementById('detailTitle');
+  const content = document.getElementById('detailContent');
+
+  title.textContent = detail.node.noun;
+  // 헤더에 체인 탐색 버튼 추가
+  const existingChainBtn = document.getElementById('chainOpenBtn');
+  if (existingChainBtn) existingChainBtn.remove();
+  const chainBtn = document.createElement('button');
+  chainBtn.id = 'chainOpenBtn';
+  chainBtn.textContent = '🔗 체인';
+  chainBtn.style.cssText = 'background:none;border:1px solid var(--accent2);color:var(--accent2);border-radius:5px;padding:3px 10px;font-size:11px;cursor:pointer;margin-right:8px';
+  chainBtn.onclick = () => openChainPanel(detail.node.noun);
+  document.querySelector('.detail-header').insertBefore(chainBtn, document.querySelector('.close-btn'));
+
+  let html = '';
+
+  // 연결 이벤트
+  if (detail.connected && detail.connected.length) {
+    html += `<div class="detail-section"><h3>연결 이벤트 TOP 10</h3>`;
+    detail.connected.forEach(c => {
+      const eid = `explain_${detail.node.id}_${c.id}`;
+      html += `<div class="connected-item" style="flex-direction:column;align-items:flex-start;gap:4px;">
+        <div style="display:flex;align-items:center;width:100%;justify-content:space-between;">
+          <span>${c.noun}</span>
+          <div style="display:flex;align-items:center;gap:6px;">
+            <span style="color:var(--accent)">${c.score}점 (${c.article_count}건)</span>
+            <button class="explain-btn" onclick="explainRelation('${detail.node.noun}','${c.noun}','${eid}', this)">✦ AI 설명</button>
+          </div>
+        </div>
+        <div class="explain-box" id="${eid}"></div>
+      </div>`;
+    });
+    html += '</div>';
+  }
+
+  // 자산 수익률
+  if (detail.isAsset && detail.assetSummary) {
+    const s = detail.assetSummary;
+    if (s.avg_returns) {
+      html += `<div class="detail-section"><h3>급증일 기준 평균 수익률</h3>
+        <div class="return-grid">`;
+      ['1d', '7d', '30d'].forEach(p => {
+        const val = s.avg_returns[p];
+        const cls = val > 0 ? 'positive' : val < 0 ? 'negative' : '';
+        const label = p === '1d' ? '+1일' : p === '7d' ? '+7일' : '+30일';
+        html += `<div class="return-card">
+          <div class="period">${label}</div>
+          <div class="value ${cls}">${val !== null ? (val > 0 ? '+' : '') + val + '%' : '-'}</div>
+        </div>`;
+      });
+      html += '</div></div>';
+    }
+
+    if (s.spike_count > 0) {
+      html += `<div class="detail-section"><h3>급증 이벤트 ${s.spike_count}건</h3></div>`;
+    }
+  }
+
+  // 최근 기사
+  if (detail.recentArticles && detail.recentArticles.length) {
+    html += `<div class="detail-section"><h3>최근 관련 기사</h3>`;
+    detail.recentArticles.forEach(a => {
+      html += `<div class="article-item">
+        <a href="${a.url || '#'}" target="_blank">${a.title}</a>
+        <div class="article-meta">${a.source} · ${a.published_at || ''}</div>
+      </div>`;
+    });
+    html += '</div>';
+  }
+
+  content.innerHTML = html;
+  panel.classList.add('visible');
+}
+
+function closeDetail() {
+  document.getElementById('detailPanel').classList.remove('visible');
+}
+
+// ══════════════════════════════════════════════════════════════
+//  체인 / 경로 탐색
+// ══════════════════════════════════════════════════════════════
+let currentChainNoun = '';
+let currentChainTab  = 'chain';
+
+function openChainPanel(noun) {
+  currentChainNoun = noun;
+  document.getElementById('chainPanelTitle').textContent = `"${noun}" 체인 탐색`;
+  document.getElementById('chainPanel').classList.add('visible');
+  switchChainTab(currentChainTab);
+}
+
+function closeChainPanel() {
+  document.getElementById('chainPanel').classList.remove('visible');
+}
+
+function switchChainTab(tab) {
+  currentChainTab = tab;
+  document.querySelectorAll('.chain-tab').forEach(b => b.classList.remove('active'));
+  document.getElementById('tab' + tab.charAt(0).toUpperCase() + tab.slice(1)).classList.add('active');
+
+  const content = document.getElementById('chainContent');
+  content.innerHTML = '<div style="color:var(--text2);font-size:12px">로딩 중...</div>';
+
+  if (tab === 'chain')   loadCooccurrenceChain(currentChainNoun);
+  if (tab === 'causal')  loadCausalChain(currentChainNoun);
+  if (tab === 'path')    renderPathInput(currentChainNoun);
+}
+
+async function loadCooccurrenceChain(noun) {
+  const content = document.getElementById('chainContent');
+  try {
+    const data = await api(`/api/chain/${encodeURIComponent(noun)}?depth=2&top_k=6`);
+    if (data.error) { content.innerHTML = `<div style="color:var(--red)">${data.error}</div>`; return; }
+
+    let html = '';
+    data.levels.forEach((level, i) => {
+      html += `<div class="chain-level">
+        <div class="chain-level-title">Depth ${i + 1}</div>
+        <div class="chain-items">`;
+      level.forEach(node => {
+        html += `<div class="chain-item" onclick="searchNode('${node.noun}')">
+          <span>${node.parent} → ${node.noun}</span>
+          <span class="score">${node.score}점</span>
+        </div>`;
+      });
+      html += '</div></div>';
+    });
+    if (!html) html = '<div style="color:var(--text2)">연결된 체인 없음</div>';
+    content.innerHTML = html;
+  } catch(e) {
+    content.innerHTML = `<div style="color:var(--red)">오류: ${e.message}</div>`;
+  }
+}
+
+async function loadCausalChain(noun) {
+  const content = document.getElementById('chainContent');
+  try {
+    const data = await api(`/api/causal/chain/${encodeURIComponent(noun)}?depth=3&direction=both`);
+    if (data.error) { content.innerHTML = `<div style="color:var(--text2)">${data.error}</div>`; return; }
+
+    let html = '';
+
+    const renderNodes = (nodes, prefix) => {
+      if (!nodes || !nodes.length) return '';
+      let s = '';
+      nodes.forEach(n => {
+        s += `<div class="chain-path" style="margin-left:${prefix * 16}px">
+          <span class="chain-node causal" onclick="searchNode('${n.noun}')">${n.noun}</span>
+          <span class="chain-arrow">← ${n.relation || ''}</span>
+          <span class="chain-meta">근거 ${n.evidence}건 / 강도 ${n.strength}</span>
+        </div>`;
+        s += renderNodes(n.children, prefix + 1);
+      });
+      return s;
+    };
+
+    const ef = data.effects_chain;
+    const ca = data.causes_chain;
+
+    if (ef && ef.length) {
+      html += '<div class="chain-level-title" style="color:var(--orange)">⚡ 이 노드가 유발하는 것</div>';
+      html += renderNodes(ef, 0);
+    }
+    if (ca && ca.length) {
+      html += '<div class="chain-level-title" style="color:var(--accent);margin-top:10px">← 이 노드를 유발하는 것</div>';
+      html += renderNodes(ca, 0);
+    }
+    if (!html) html = '<div style="color:var(--text2)">인과 데이터 없음 — /api/pipeline/extract-causality 실행 필요</div>';
+    content.innerHTML = html;
+  } catch(e) {
+    content.innerHTML = `<div style="color:var(--red)">오류: ${e.message}</div>`;
+  }
+}
+
+function renderPathInput(noun) {
+  const content = document.getElementById('chainContent');
+  content.innerHTML = `
+    <div class="chain-path-input">
+      <input id="pathFrom" value="${noun}" placeholder="시작 노드">
+      <span style="color:var(--text2)">→</span>
+      <input id="pathTo" placeholder="끝 노드 (예: 인플레)">
+      <button onclick="findPathAndRender()">탐색</button>
+    </div>
+    <div id="pathResult"></div>`;
+}
+
+async function findPathAndRender() {
+  const from = document.getElementById('pathFrom').value.trim();
+  const to   = document.getElementById('pathTo').value.trim();
+  const result = document.getElementById('pathResult');
+  if (!from || !to) return;
+
+  result.innerHTML = '<div style="color:var(--text2)">탐색 중...</div>';
+
+  // 공동출현 + 인과 동시 탐색
+  const [cooc, causal] = await Promise.all([
+    api(`/api/path?node_a=${encodeURIComponent(from)}&node_b=${encodeURIComponent(to)}`),
+    api(`/api/causal/path?node_a=${encodeURIComponent(from)}&node_b=${encodeURIComponent(to)}`),
+  ]);
+
+  let html = '';
+
+  if (!cooc.error) {
+    html += '<div class="chain-level-title">공동출현 경로</div><div class="chain-path">';
+    cooc.path.forEach((n, i) => {
+      html += `<span class="chain-node${i===0||i===cooc.path.length-1?' root':''}" onclick="searchNode('${n}')">${n}</span>`;
+      if (i < cooc.hops.length) {
+        html += `<span class="chain-arrow" title="${cooc.hops[i].score}점">→</span>`;
+      }
+    });
+    html += `<span class="chain-meta">${cooc.length}홉</span></div>`;
+  } else {
+    html += `<div style="color:var(--text2);font-size:12px">${cooc.error}</div>`;
+  }
+
+  if (!causal.error) {
+    html += '<div class="chain-level-title" style="margin-top:10px;color:var(--orange)">인과 경로 (Gemini 추출)</div><div class="chain-path">';
+    causal.path.forEach((n, i) => {
+      html += `<span class="chain-node causal${i===0||i===causal.path.length-1?' root':''}" onclick="searchNode('${n}')">${n}</span>`;
+      if (i < causal.hops.length) {
+        const rel = causal.hops[i].relation || '';
+        html += `<span class="chain-arrow" title="${rel}">⚡</span>`;
+      }
+    });
+    html += `<span class="chain-meta">${causal.length}홉</span></div>`;
+  } else {
+    html += `<div style="color:var(--text2);font-size:12px;margin-top:8px">${causal.error}</div>`;
+  }
+
+  result.innerHTML = html;
+}
+
+async function explainRelation(nodeA, nodeB, boxId, btn) {
+  const box = document.getElementById(boxId);
+
+  // 토글: 이미 열려있으면 닫기
+  if (box.classList.contains('visible')) {
+    box.classList.remove('visible');
+    btn.textContent = '✦ AI 설명';
+    return;
+  }
+
+  // 로딩 상태
+  btn.disabled = true;
+  btn.textContent = '분석 중...';
+  box.innerHTML = '<span style="color:var(--text2)">Gemini가 분석하는 중...</span>';
+  box.classList.add('visible');
+
+  try {
+    const res = await fetch(`/api/explain?node_a=${encodeURIComponent(nodeA)}&node_b=${encodeURIComponent(nodeB)}`);
+    const data = await res.json();
+
+    let content = `<div>${data.explanation}</div>`;
+    if (data.articles && data.articles.length) {
+      const srcs = data.articles.map(a => `${a.title.slice(0,30)}… (${a.source})`).join(' / ');
+      content += `<div class="explain-src">근거 기사: ${srcs}</div>`;
+    }
+    box.innerHTML = content;
+    btn.textContent = '✦ 닫기';
+  } catch(e) {
+    box.innerHTML = `<span style="color:var(--red)">오류 발생: ${e.message}</span>`;
+    btn.textContent = '✦ AI 설명';
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+// ── 드래그 ──
+function dragStart(event, d) {
+  if (!event.active) simulation.alphaTarget(0.3).restart();
+  d.fx = d.x; d.fy = d.y;
+}
+
+function dragging(event, d) { d.fx = event.x; d.fy = event.y; }
+
+function dragEnd(event, d) {
+  if (!event.active) simulation.alphaTarget(0);
+  d.fx = null; d.fy = null;
+}
+
+// ── 줌 ──
+function zoomIn() { d3.select('#graphSvg').transition().call(zoom.scaleBy, 1.5); }
+function zoomOut() { d3.select('#graphSvg').transition().call(zoom.scaleBy, 0.67); }
+function zoomReset() { d3.select('#graphSvg').transition().call(zoom.transform, d3.zoomIdentity); }
+
+// ══════════════════════════════════════════════════════════════
+//  컨트롤
+// ══════════════════════════════════════════════════════════════
+function setPeriod(period, btn) {
+  currentPeriod = period;
+  document.querySelectorAll('.period-btns button').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  loadGraph();
+}
+
+function doSearch() {
+  const q = document.getElementById('searchInput').value.trim();
+  currentSearch = q || null;
+  loadGraph();
+  if (q) showToast(`"${q}" 중심 그래프 표시`);
+}
+
+function searchNode(noun) {
+  document.getElementById('searchInput').value = noun;
+  currentSearch = noun;
+  loadGraph();
+}
+
+function refreshGraph() {
+  loadStats();
+  loadCentrality();
+  loadGraph();
+  showToast('새로고침 완료');
+}
+
+async function runPipeline() {
+  showLoading('전체 파이프라인 실행 중... (1~2분 소요)');
+  try {
+    const result = await api('/api/pipeline/full', 'POST');
+    hideLoading();
+    showToast('데이터 수집 완료!');
+    refreshGraph();
+    console.log('Pipeline result:', result);
+  } catch(e) {
+    hideLoading();
+    showToast('파이프라인 오류 발생');
+    console.error(e);
+  }
+}
+</script>
+</body>
+</html>

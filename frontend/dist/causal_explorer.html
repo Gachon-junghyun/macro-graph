@@ -1,0 +1,694 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>인과 탐색기 — 시나리오 분석</title>
+<style>
+  :root {
+    --bg: #0f1117;
+    --bg2: #1a1d27;
+    --bg3: #22263a;
+    --border: #2e3350;
+    --accent: #5b8dee;
+    --accent2: #e05c72;
+    --accent3: #4ecdc4;
+    --text: #e2e8f0;
+    --muted: #7a859e;
+    --tag-금융: #2563eb;
+    --tag-안보: #dc2626;
+    --tag-기술: #7c3aed;
+    --tag-에너지: #d97706;
+    --tag-실물: #059669;
+    --tag-지정학: #db2777;
+    --tag-공급망: #ea580c;
+    --tag-보건: #0891b2;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans KR', sans-serif;
+    background: var(--bg); color: var(--text);
+    min-height: 100vh;
+  }
+
+  /* ── 헤더 ─────────────────────────────────────────── */
+  .header {
+    background: var(--bg2);
+    border-bottom: 1px solid var(--border);
+    padding: 16px 24px;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .header h1 { font-size: 18px; font-weight: 600; letter-spacing: -0.3px; }
+  .header h1 span { color: var(--accent); }
+  .header-stats { display: flex; gap: 20px; font-size: 12px; color: var(--muted); }
+  .stat-badge { display: flex; flex-direction: column; align-items: center; }
+  .stat-badge .val { font-size: 18px; font-weight: 700; color: var(--text); }
+  .back-link {
+    color: var(--muted); text-decoration: none; font-size: 13px;
+    padding: 5px 12px; border: 1px solid var(--border); border-radius: 6px;
+    transition: all .15s;
+  }
+  .back-link:hover { color: var(--text); border-color: var(--accent); }
+
+  /* ── 검색 영역 ────────────────────────────────────── */
+  .search-area {
+    padding: 28px 24px 20px;
+    max-width: 900px; margin: 0 auto;
+  }
+  .search-row {
+    display: flex; gap: 10px; align-items: center;
+  }
+  .search-input-wrap {
+    flex: 1; position: relative;
+  }
+  .search-input-wrap .icon {
+    position: absolute; left: 14px; top: 50%; transform: translateY(-50%);
+    font-size: 18px; color: var(--muted); pointer-events: none;
+  }
+  #searchInput {
+    width: 100%;
+    background: var(--bg2); border: 1.5px solid var(--border);
+    color: var(--text); font-size: 16px;
+    padding: 12px 16px 12px 44px;
+    border-radius: 10px; outline: none;
+    transition: border-color .2s;
+  }
+  #searchInput:focus { border-color: var(--accent); }
+  #searchInput::placeholder { color: var(--muted); }
+
+  .btn {
+    padding: 12px 22px; border-radius: 10px; border: none;
+    font-size: 14px; font-weight: 600; cursor: pointer; transition: all .15s;
+  }
+  .btn-primary {
+    background: var(--accent); color: #fff;
+  }
+  .btn-primary:hover { background: #4a7de0; }
+
+  /* 옵션 바 */
+  .options-bar {
+    display: flex; gap: 10px; align-items: center;
+    margin-top: 12px; flex-wrap: wrap;
+  }
+  .opt-label { font-size: 12px; color: var(--muted); }
+  select.opt-select {
+    background: var(--bg2); border: 1px solid var(--border);
+    color: var(--text); font-size: 12px;
+    padding: 5px 10px; border-radius: 6px; outline: none;
+  }
+  .suggestion-chips {
+    display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px;
+  }
+  .chip {
+    padding: 4px 12px; border-radius: 20px; font-size: 12px;
+    border: 1px solid var(--border); color: var(--muted);
+    cursor: pointer; background: var(--bg2); transition: all .15s;
+  }
+  .chip:hover { color: var(--accent); border-color: var(--accent); background: rgba(91,141,238,.08); }
+
+  /* ── 카테고리 필터 탭 ────────────────────────────── */
+  .cat-tabs {
+    display: flex; gap: 6px; flex-wrap: wrap;
+    padding: 0 24px 16px; max-width: 900px; margin: 0 auto;
+  }
+  .cat-tab {
+    padding: 5px 14px; border-radius: 20px; font-size: 12px; font-weight: 500;
+    border: 1px solid var(--border); cursor: pointer;
+    background: transparent; color: var(--muted); transition: all .15s;
+  }
+  .cat-tab:hover, .cat-tab.active {
+    background: var(--bg3); color: var(--text); border-color: var(--accent);
+  }
+  .cat-tab.active { background: rgba(91,141,238,.15); }
+
+  /* ── 결과 영역 ────────────────────────────────────── */
+  .results { max-width: 900px; margin: 0 auto; padding: 0 24px 40px; }
+
+  /* 결과 뷰 탭 */
+  .view-tabs {
+    display: flex; gap: 0; margin-bottom: 20px;
+    border-bottom: 1px solid var(--border);
+  }
+  .view-tab {
+    padding: 10px 20px; font-size: 13px; font-weight: 500;
+    cursor: pointer; color: var(--muted); border-bottom: 2px solid transparent;
+    transition: all .15s; background: none; border-top: none; border-left: none; border-right: none;
+  }
+  .view-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+  /* 빈 상태 */
+  .empty-state {
+    text-align: center; padding: 60px 20px; color: var(--muted);
+  }
+  .empty-state .emoji { font-size: 48px; margin-bottom: 12px; }
+  .empty-state p { font-size: 14px; margin-top: 6px; }
+
+  /* 로딩 */
+  .loading { text-align: center; padding: 40px; color: var(--muted); font-size: 14px; }
+  .spinner {
+    display: inline-block; width: 20px; height: 20px;
+    border: 2px solid var(--border); border-top-color: var(--accent);
+    border-radius: 50%; animation: spin .6s linear infinite;
+    margin-right: 8px; vertical-align: middle;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── 엣지 카드 ─────────────────────────────────────── */
+  .edge-list { display: flex; flex-direction: column; gap: 8px; }
+  .edge-card {
+    background: var(--bg2); border: 1px solid var(--border);
+    border-radius: 10px; padding: 14px 16px;
+    display: flex; align-items: center; gap: 12px;
+    transition: border-color .15s;
+  }
+  .edge-card:hover { border-color: #3e4570; }
+  .edge-cause {
+    font-size: 14px; font-weight: 500; color: var(--text);
+    min-width: 0; flex: 1;
+  }
+  .edge-arrow {
+    color: var(--muted); font-size: 18px; flex-shrink: 0;
+    display: flex; flex-direction: column; align-items: center; gap: 2px;
+  }
+  .edge-arrow .rel {
+    font-size: 10px; color: var(--muted); white-space: nowrap;
+    max-width: 120px; overflow: hidden; text-overflow: ellipsis;
+  }
+  .edge-effect {
+    font-size: 14px; font-weight: 500; color: var(--text);
+    min-width: 0; flex: 1; text-align: right;
+  }
+  .edge-meta {
+    display: flex; flex-direction: column; align-items: flex-end; gap: 4px;
+    flex-shrink: 0;
+  }
+  .strength-dot {
+    display: flex; gap: 3px;
+  }
+  .dot {
+    width: 8px; height: 8px; border-radius: 50%; background: var(--border);
+  }
+  .dot.on { background: var(--accent); }
+
+  /* ── 시나리오 뷰 ─────────────────────────────────── */
+  .scenario-panels {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 16px;
+  }
+  @media (max-width: 700px) { .scenario-panels { grid-template-columns: 1fr; } }
+
+  .scenario-panel {
+    background: var(--bg2); border: 1px solid var(--border); border-radius: 12px;
+    overflow: hidden;
+  }
+  .panel-header {
+    padding: 14px 16px; border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 8px;
+  }
+  .panel-header .icon { font-size: 18px; }
+  .panel-header .title { font-size: 13px; font-weight: 600; }
+  .panel-header .subtitle { font-size: 11px; color: var(--muted); margin-left: auto; }
+
+  .scenario-tree { padding: 16px; }
+  .tree-root {
+    font-size: 13px; font-weight: 600; color: var(--accent);
+    padding: 6px 10px; background: rgba(91,141,238,.1);
+    border-radius: 6px; margin-bottom: 8px;
+    cursor: pointer;
+  }
+  .tree-root:hover { background: rgba(91,141,238,.2); }
+  .tree-children { margin-left: 20px; border-left: 2px solid var(--border); padding-left: 14px; }
+  .tree-node {
+    margin: 6px 0; font-size: 13px;
+    display: flex; align-items: flex-start; gap: 8px;
+  }
+  .tree-node .arrow-icon { color: var(--muted); margin-top: 1px; font-size: 12px; }
+  .tree-node .node-text { flex: 1; line-height: 1.4; }
+  .tree-node .node-rel { font-size: 10px; color: var(--muted); display: block; }
+  .tree-node .node-cat { font-size: 10px; }
+
+  /* ── 체인 카드 ─────────────────────────────────────── */
+  .chain-list { display: flex; flex-direction: column; gap: 10px; }
+  .chain-card {
+    background: var(--bg2); border: 1px solid var(--border);
+    border-radius: 10px; padding: 14px 16px;
+    transition: border-color .15s;
+  }
+  .chain-card:hover { border-color: #3e4570; }
+  .chain-text {
+    font-size: 13px; line-height: 1.7; color: var(--text);
+    word-break: keep-all;
+  }
+  .chain-text .step {
+    display: inline-flex; align-items: center; gap: 4px;
+  }
+  .chain-text .step-arrow { color: var(--accent); font-weight: 700; }
+  .chain-footer {
+    margin-top: 8px; display: flex; align-items: center; gap: 10px;
+  }
+  .conf-bar {
+    height: 3px; border-radius: 2px; background: var(--border); flex: 1;
+  }
+  .conf-fill {
+    height: 100%; border-radius: 2px; background: var(--accent);
+    transition: width .3s;
+  }
+  .chain-article { font-size: 11px; color: var(--muted); max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  /* ── 카테고리 뱃지 ─────────────────────────────────── */
+  .cat-badge {
+    display: inline-block; padding: 2px 8px; border-radius: 4px;
+    font-size: 10px; font-weight: 600; white-space: nowrap;
+  }
+  .cat-badge.금융시장  { background: rgba(37,99,235,.2);  color: #60a5fa; }
+  .cat-badge.안보      { background: rgba(220,38,38,.2);  color: #f87171; }
+  .cat-badge.기술산업  { background: rgba(124,58,237,.2); color: #a78bfa; }
+  .cat-badge.에너지시장{ background: rgba(217,119,6,.2);  color: #fbbf24; }
+  .cat-badge.실물경제  { background: rgba(5,150,105,.2);  color: #34d399; }
+  .cat-badge.지정학    { background: rgba(219,39,119,.2); color: #f472b6; }
+  .cat-badge.공급망    { background: rgba(234,88,12,.2);  color: #fb923c; }
+  .cat-badge.보건      { background: rgba(8,145,178,.2);  color: #22d3ee; }
+  .cat-badge.식량      { background: rgba(132,204,22,.2); color: #a3e635; }
+
+  /* 결과 카운트 */
+  .result-count {
+    font-size: 12px; color: var(--muted); margin-bottom: 12px;
+  }
+  .result-count span { color: var(--text); font-weight: 600; }
+</style>
+</head>
+<body>
+
+<!-- 헤더 -->
+<div class="header">
+  <h1>⚡ 인과 <span>탐색기</span></h1>
+  <div class="header-stats">
+    <div class="stat-badge"><span class="val" id="statEdges">-</span><span>인과 엣지</span></div>
+    <div class="stat-badge"><span class="val" id="statChains">-</span><span>인과 체인</span></div>
+    <div class="stat-badge"><span class="val" id="statNodes">-</span><span>고유 노드</span></div>
+  </div>
+  <a href="/" class="back-link">← 그래프로</a>
+</div>
+
+<!-- 검색 영역 -->
+<div class="search-area">
+  <div class="search-row">
+    <div class="search-input-wrap">
+      <span class="icon">🔍</span>
+      <input type="text" id="searchInput"
+        placeholder="시나리오 입력: 전쟁, 금리 인상, 유가 급등, 관세 부과 ..."
+        autocomplete="off"
+      >
+    </div>
+    <button class="btn btn-primary" id="searchBtn">탐색</button>
+  </div>
+  <div class="options-bar">
+    <span class="opt-label">강도</span>
+    <select class="opt-select" id="strengthFilter">
+      <option value="1">전체 (1~3)</option>
+      <option value="2">중간 이상 (2~3)</option>
+      <option value="3">강함만 (3)</option>
+    </select>
+    <span class="opt-label">깊이</span>
+    <select class="opt-select" id="depthFilter">
+      <option value="2">2단계</option>
+      <option value="3" selected>3단계</option>
+      <option value="4">4단계</option>
+    </select>
+  </div>
+  <div class="suggestion-chips" id="suggestionChips"></div>
+</div>
+
+<!-- 카테고리 탭 -->
+<div class="cat-tabs" id="catTabs">
+  <button class="cat-tab active" data-cat="">전체</button>
+</div>
+
+<!-- 결과 -->
+<div class="results">
+  <div class="view-tabs">
+    <button class="view-tab active" data-view="scenario">🗺 시나리오</button>
+    <button class="view-tab" data-view="edges">🔗 인과 엣지</button>
+    <button class="view-tab" data-view="chains">⛓ 인과 체인</button>
+  </div>
+  <div id="resultArea">
+    <div class="empty-state">
+      <div class="emoji">🔭</div>
+      <div style="font-size:15px;font-weight:600;color:var(--text)">시나리오를 입력하세요</div>
+      <p>예: "전쟁" 검색 → 전쟁이 유발하는 경제적 연쇄 효과를 추적합니다</p>
+      <p style="margin-top:8px">그래프 IDF 필터에서 제외된 2,200+ 개 노드까지 모두 검색됩니다</p>
+    </div>
+  </div>
+</div>
+
+<script>
+const API = window.location.origin;
+let currentView = 'scenario';
+let currentCategory = '';
+let lastData = null;
+
+// ── 통계 로드 ──────────────────────────────────────────────
+async function loadStats() {
+  try {
+    const r = await fetch(`${API}/api/causal/explorer/stats`);
+    const d = await r.json();
+    document.getElementById('statEdges').textContent  = d.total_edges.toLocaleString();
+    document.getElementById('statChains').textContent = d.total_chains.toLocaleString();
+    document.getElementById('statNodes').textContent  = d.total_nodes.toLocaleString();
+
+    // 카테고리 탭 생성
+    const tabsEl = document.getElementById('catTabs');
+    d.categories.forEach(c => {
+      const btn = document.createElement('button');
+      btn.className = 'cat-tab';
+      btn.dataset.cat = c.name;
+      btn.textContent = `${c.name} ${c.count}`;
+      btn.onclick = () => selectCategory(c.name, btn);
+      tabsEl.appendChild(btn);
+    });
+
+    // 추천 검색어 (top causes)
+    const chips = document.getElementById('suggestionChips');
+    d.top_causes.slice(0, 10).forEach(n => {
+      const el = document.createElement('span');
+      el.className = 'chip';
+      el.textContent = n.noun;
+      el.onclick = () => { document.getElementById('searchInput').value = n.noun; doSearch(); };
+      chips.appendChild(el);
+    });
+  } catch(e) { console.error(e); }
+}
+
+// ── 카테고리 선택 ──────────────────────────────────────────
+function selectCategory(cat, btn) {
+  currentCategory = cat;
+  document.querySelectorAll('.cat-tab').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  if (lastData) renderAll(lastData);
+}
+
+// ── 검색 실행 ──────────────────────────────────────────────
+async function doSearch() {
+  const q         = document.getElementById('searchInput').value.trim();
+  const strength  = parseInt(document.getElementById('strengthFilter').value);
+  const depth     = parseInt(document.getElementById('depthFilter').value);
+  if (!q) return;
+
+  document.getElementById('resultArea').innerHTML =
+    `<div class="loading"><span class="spinner"></span> 탐색 중...</div>`;
+
+  try {
+    // 시나리오 + 엣지 + 체인 동시 요청
+    const [scenRes, chainRes] = await Promise.all([
+      fetch(`${API}/api/causal/scenario?q=${encodeURIComponent(q)}&depth=${depth}&min_strength=${strength}`),
+      fetch(`${API}/api/causal/chains/search?q=${encodeURIComponent(q)}&limit=100`),
+    ]);
+    const scenData  = await scenRes.json();
+    const chainData = await chainRes.json();
+
+    lastData = { scen: scenData, chains: chainData.chains, q };
+    renderAll(lastData);
+  } catch(e) {
+    document.getElementById('resultArea').innerHTML =
+      `<div class="empty-state"><div class="emoji">⚠️</div><p>${e.message}</p></div>`;
+  }
+}
+
+// ── 전체 렌더 ──────────────────────────────────────────────
+function renderAll(data) {
+  const { scen, chains, q } = data;
+
+  // 카테고리 필터 적용
+  const filtEdges  = currentCategory
+    ? scen.direct_edges.filter(e => e.category === currentCategory)
+    : scen.direct_edges;
+  const filtChains = currentCategory
+    ? chains.filter(c => c.category === currentCategory)
+    : chains;
+
+  if      (currentView === 'scenario') renderScenario(scen, q);
+  else if (currentView === 'edges')    renderEdges(filtEdges);
+  else if (currentView === 'chains')   renderChains(filtChains);
+}
+
+// ── 시나리오 뷰 ────────────────────────────────────────────
+function renderScenario(data, q) {
+  const fwd = data.forward;
+  const bwd = data.backward;
+
+  const totalFwd = Object.keys(fwd.tree).length;
+  const totalBwd = Object.keys(bwd.tree).length;
+
+  let html = `
+    <div class="result-count">
+      "<span>${q}</span>" — 순방향 노드 <span>${totalFwd}</span>개 · 역방향 노드 <span>${totalBwd}</span>개
+    </div>
+    <div class="scenario-panels">
+  `;
+
+  // 순방향 패널
+  html += `
+    <div class="scenario-panel">
+      <div class="panel-header">
+        <span class="icon">💥</span>
+        <span class="title">${escHtml(q)} 가 유발하는 것</span>
+        <span class="subtitle">${fwd.roots.length}개 시작점</span>
+      </div>
+      <div class="scenario-tree" id="fwdTree">
+  `;
+  if (fwd.roots.length === 0) {
+    html += `<div style="color:var(--muted);font-size:13px;padding:10px 0">매칭 결과 없음</div>`;
+  } else {
+    fwd.roots.forEach(root => {
+      html += renderTreeNode(fwd.tree, root, 'forward', 0);
+    });
+  }
+  html += `</div></div>`;
+
+  // 역방향 패널
+  html += `
+    <div class="scenario-panel">
+      <div class="panel-header">
+        <span class="icon">🔍</span>
+        <span class="title">${escHtml(q)} 의 원인</span>
+        <span class="subtitle">${bwd.roots.length}개 시작점</span>
+      </div>
+      <div class="scenario-tree" id="bwdTree">
+  `;
+  if (bwd.roots.length === 0) {
+    html += `<div style="color:var(--muted);font-size:13px;padding:10px 0">매칭 결과 없음</div>`;
+  } else {
+    bwd.roots.forEach(root => {
+      html += renderTreeBwdNode(bwd.tree, root, 0);
+    });
+  }
+  html += `</div></div>`;
+
+  html += `</div>`;
+
+  // 직접 연결 엣지 미리보기 (상위 5개)
+  if (data.direct_edges.length > 0) {
+    html += `
+      <div style="margin-top:20px">
+        <div class="result-count">직접 연결 인과 엣지 <span>${data.direct_edges.length}</span>건 (상위 표시)</div>
+        <div class="edge-list">
+    `;
+    data.direct_edges.slice(0,8).forEach(e => {
+      html += edgeCardHtml(e);
+    });
+    if (data.direct_edges.length > 8) {
+      html += `<div style="text-align:center;margin-top:8px">
+        <button class="btn btn-primary" onclick="switchView('edges')" style="font-size:12px;padding:8px 16px">
+          전체 ${data.direct_edges.length}건 보기 →
+        </button></div>`;
+    }
+    html += `</div></div>`;
+  }
+
+  document.getElementById('resultArea').innerHTML = html;
+}
+
+function renderTreeNode(tree, node, dir, depth) {
+  const MAX_DEPTH = 4;
+  let html = `<div class="tree-root" onclick="quickSearch('${escAttr(node)}')">${escHtml(node)}</div>`;
+  const children = tree[node];
+  if (children && children.length > 0 && depth < MAX_DEPTH) {
+    html += `<div class="tree-children">`;
+    children.forEach(child => {
+      html += `
+        <div class="tree-node">
+          <span class="arrow-icon">→</span>
+          <span class="node-text">
+            <span class="node-rel">${escHtml(child.relation || '')}</span>
+            <span onclick="quickSearch('${escAttr(child.effect)}')" style="cursor:pointer">
+              ${escHtml(child.effect)}
+            </span>
+            ${catBadge(child.category)}
+            <span style="font-size:10px;color:var(--muted)"> ×${child.evidence}</span>
+          </span>
+          <span>${strengthDots(child.strength)}</span>
+        </div>
+      `;
+      // 재귀 자식
+      if (tree[child.effect] && depth + 1 < MAX_DEPTH) {
+        html += `<div style="margin-left:16px;border-left:2px solid var(--border);padding-left:12px">`;
+        html += renderTreeNode(tree, child.effect, dir, depth + 1);
+        html += `</div>`;
+      }
+    });
+    html += `</div>`;
+  }
+  return html;
+}
+
+function renderTreeBwdNode(tree, node, depth) {
+  const MAX_DEPTH = 4;
+  let html = `<div class="tree-root" onclick="quickSearch('${escAttr(node)}')">${escHtml(node)}</div>`;
+  const parents = tree[node];
+  if (parents && parents.length > 0 && depth < MAX_DEPTH) {
+    html += `<div class="tree-children">`;
+    parents.forEach(p => {
+      html += `
+        <div class="tree-node">
+          <span class="arrow-icon">←</span>
+          <span class="node-text">
+            <span class="node-rel">${escHtml(p.relation || '')}</span>
+            <span onclick="quickSearch('${escAttr(p.cause)}')" style="cursor:pointer">
+              ${escHtml(p.cause)}
+            </span>
+            ${catBadge(p.category)}
+            <span style="font-size:10px;color:var(--muted)"> ×${p.evidence}</span>
+          </span>
+          <span>${strengthDots(p.strength)}</span>
+        </div>
+      `;
+      if (tree[p.cause] && depth + 1 < MAX_DEPTH) {
+        html += `<div style="margin-left:16px;border-left:2px solid var(--border);padding-left:12px">`;
+        html += renderTreeBwdNode(tree, p.cause, depth + 1);
+        html += `</div>`;
+      }
+    });
+    html += `</div>`;
+  }
+  return html;
+}
+
+// ── 엣지 뷰 ────────────────────────────────────────────────
+function renderEdges(edges) {
+  if (edges.length === 0) {
+    document.getElementById('resultArea').innerHTML =
+      `<div class="empty-state"><div class="emoji">🔍</div><p>매칭 결과 없음</p></div>`;
+    return;
+  }
+  let html = `<div class="result-count">인과 엣지 <span>${edges.length}</span>건</div><div class="edge-list">`;
+  edges.forEach(e => { html += edgeCardHtml(e); });
+  html += `</div>`;
+  document.getElementById('resultArea').innerHTML = html;
+}
+
+function edgeCardHtml(e) {
+  return `
+    <div class="edge-card">
+      <div class="edge-cause" onclick="quickSearch('${escAttr(e.cause)}')" style="cursor:pointer">${escHtml(e.cause)}</div>
+      <div class="edge-arrow">
+        <span>→</span>
+        <span class="rel">${escHtml(e.relation || '')}</span>
+      </div>
+      <div class="edge-effect" onclick="quickSearch('${escAttr(e.effect)}')" style="cursor:pointer">${escHtml(e.effect)}</div>
+      <div class="edge-meta">
+        ${catBadge(e.category)}
+        ${strengthDots(e.strength)}
+      </div>
+    </div>
+  `;
+}
+
+// ── 체인 뷰 ────────────────────────────────────────────────
+function renderChains(chains) {
+  if (chains.length === 0) {
+    document.getElementById('resultArea').innerHTML =
+      `<div class="empty-state"><div class="emoji">⛓</div><p>매칭 체인 없음</p></div>`;
+    return;
+  }
+  let html = `<div class="result-count">인과 체인 <span>${chains.length}</span>건</div><div class="chain-list">`;
+  chains.forEach(c => {
+    const steps = parseChainText(c.chain_text);
+    const confPct = Math.round((c.confidence / 3) * 100);
+    html += `
+      <div class="chain-card">
+        <div class="chain-text">
+          ${steps.map((s,i) => `
+            <span class="step">
+              ${i > 0 ? '<span class="step-arrow"> → </span>' : ''}
+              <span onclick="quickSearch('${escAttr(s)}')" style="cursor:pointer">${escHtml(s)}</span>
+            </span>
+          `).join('')}
+        </div>
+        <div class="chain-footer">
+          ${catBadge(c.category)}
+          <div class="conf-bar"><div class="conf-fill" style="width:${confPct}%"></div></div>
+          <span class="chain-article" title="${escAttr(c.article_title)}">${escHtml(c.article_title)}</span>
+        </div>
+      </div>
+    `;
+  });
+  html += `</div>`;
+  document.getElementById('resultArea').innerHTML = html;
+}
+
+// ── 유틸 ──────────────────────────────────────────────────
+function parseChainText(text) {
+  if (!text) return [];
+  return text.split(/→|->/).map(s => s.trim()).filter(Boolean);
+}
+
+function catBadge(cat) {
+  if (!cat) return '';
+  const cls = cat.replace(/시장|산업|경제/g,'').trim();
+  return `<span class="cat-badge ${cat}">${cat}</span>`;
+}
+
+function strengthDots(s) {
+  const n = parseInt(s) || 1;
+  let html = '<div class="strength-dot">';
+  for (let i=1;i<=3;i++) html += `<div class="dot ${i<=n?'on':''}"></div>`;
+  html += '</div>';
+  return html;
+}
+
+function escHtml(s) {
+  if (!s) return '';
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+          .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+function escAttr(s) {
+  if (!s) return '';
+  return s.replace(/'/g,"\\'").replace(/"/g,'&quot;');
+}
+
+function quickSearch(q) {
+  document.getElementById('searchInput').value = q;
+  doSearch();
+}
+
+function switchView(v) {
+  currentView = v;
+  document.querySelectorAll('.view-tab').forEach(b => {
+    b.classList.toggle('active', b.dataset.view === v);
+  });
+  if (lastData) renderAll(lastData);
+}
+
+// ── 이벤트 바인딩 ─────────────────────────────────────────
+document.getElementById('searchBtn').onclick = doSearch;
+document.getElementById('searchInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') doSearch();
+});
+document.querySelectorAll('.view-tab').forEach(btn => {
+  btn.onclick = () => switchView(btn.dataset.view);
+});
+
+// ── 초기화 ────────────────────────────────────────────────
+loadStats();
+</script>
+</body>
+</html>

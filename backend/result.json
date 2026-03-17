@@ -1,0 +1,88 @@
+{
+  "period": "2026-03-01 ~ 2026-03-15",
+  "keyword": "금리",
+  "dry_run": false,
+  "sources": {
+    "yna": {
+      "url_collected": 0,
+      "crawled": 0,
+      "saved": 0,
+      "failed": 0
+    },
+    "hankyung": {
+      "url_collected": 0,
+      "crawled": 0,
+      "saved": 0,
+      "failed": 0
+    },
+    "mk": {
+      "url_collected": 0,
+      "crawled": 0,
+      "saved": 0,
+      "failed": 0
+    },
+    "edaily": {
+      "url_collected": 0,
+      "crawled": 0,
+      "saved": 0,
+      "failed": 0
+    },
+    "mt": {
+      "url_collected": 0,
+      "crawled": 0,
+      "saved": 0,
+      "failed": 0
+    },
+    "heraldcorp": {
+      "url_collected": 0,
+      "crawled": 0,
+      "saved": 0,
+      "failed": 0
+    },
+    "einfomax": {
+      "url_collected": 0,
+      "crawled": 0,
+      "saved": 0,
+      "failed": 0
+    },
+    "chosun": {
+      "url_collected": 0,
+      "crawled": 0,
+      "saved": 0,
+      "failed": 0
+    },
+    "yna_archive": {
+      "url_collected": 0,
+      "crawled": 0,
+      "saved": 0,
+      "failed": 0
+    },
+    "mk_archive": {
+      "crawled": 16,
+      "saved": 16,
+      "failed": 0,
+      "skipped_db": 0,
+      "url_collected": 16
+    },
+    "hankyung_archive": {
+      "crawled": 24,
+      "saved": 24,
+      "failed": 1,
+      "skipped_db": 0,
+      "url_collected": 25
+    },
+    "google": {
+      "crawled": 29,
+      "saved": 29,
+      "failed": 1,
+      "skipped_db": 0,
+      "url_collected": 30
+    }
+  },
+  "total": {
+    "url_collected": 71,
+    "crawled": 69,
+    "saved": 69,
+    "failed": 2
+  }
+}
