@@ -14,6 +14,7 @@ Gemini 기반 핵심 개념 추출기 (v2 — kiwipiepy 완전 제거).
 """
 
 import json
+import os
 from typing import List, Dict
 
 from database import get_db

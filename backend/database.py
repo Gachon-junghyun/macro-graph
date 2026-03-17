@@ -194,6 +194,36 @@ def _migrate(conn_or_path: str):
         except sqlite3.OperationalError:
             pass
 
+        # extractor_version 컬럼 추가 (v1/v2 구분)
+        for table in ("causal_edges", "causal_chains"):
+            try:
+                conn.execute(
+                    f"ALTER TABLE {table} ADD COLUMN extractor_version TEXT DEFAULT 'v1'"
+                )
+                conn.commit()
+            except sqlite3.OperationalError:
+                pass  # 이미 존재
+
+        # causal_edges.article_id 인덱스 (시간 필터 JOIN 성능)
+        try:
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_causal_edges_article "
+                "ON causal_edges(article_id)"
+            )
+            conn.commit()
+        except sqlite3.OperationalError:
+            pass
+
+        # causal_chains.article_id 인덱스 (신규체인 탐색 성능)
+        try:
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_causal_chains_article "
+                "ON causal_chains(article_id)"
+            )
+            conn.commit()
+        except sqlite3.OperationalError:
+            pass
+
         # ── v2 마이그레이션: 정규화 레이어 테이블 ──────────────────────
         # concepts: 정규화된 표준 개념 레지스트리
         conn.execute("""

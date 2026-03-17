@@ -20,7 +20,7 @@ api.py 에 아래 두 줄 추가하면 바로 활성화됩니다:
 """
 
 from __future__ import annotations
-
+import os
 from fastapi import APIRouter, Query
 from database import get_db
 

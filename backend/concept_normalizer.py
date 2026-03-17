@@ -31,7 +31,7 @@ import time
 from typing import Dict, List, Optional, Set
 
 from database import get_db
-
+import os
 from dotenv import load_dotenv
 load_dotenv()
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")

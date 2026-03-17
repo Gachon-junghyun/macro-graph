@@ -1,0 +1,401 @@
+================================================================================
+  macro-graph DB 구조 & 사용처 참조 문서
+  (데이터셋 변경 시 반드시 이 파일을 먼저 읽고 작업할 것)
+  마지막 업데이트: 2026-03-17
+================================================================================
+
+이 파일은 macro_graph.db의 모든 테이블 스키마와
+각 테이블이 어떤 파일/함수에서 읽히고 쓰이는지를 정리한 참조 문서다.
+컬럼을 추가·삭제·이름 변경하거나 테이블을 재설계할 때 반드시 아래 목록을
+확인하고 관련 파일을 함께 수정해야 한다.
+
+
+────────────────────────────────────────────────────────────────────────────────
+1. articles  (기사 원본 저장)
+────────────────────────────────────────────────────────────────────────────────
+컬럼:
+  id           INTEGER  PRIMARY KEY AUTOINCREMENT
+  source       TEXT     NOT NULL      뉴스 출처 (예: "연합뉴스")
+  title        TEXT     NOT NULL      기사 제목
+  body         TEXT                   기사 본문 전체
+  url          TEXT     UNIQUE        원문 URL (중복 방지 키)
+  published_at TEXT                   발행 시각 (ISO 8601 문자열)
+  created_at   TEXT     DEFAULT now() DB 저장 시각
+
+인덱스:
+  idx_articles_published  ON articles(published_at)
+  idx_articles_url        ON articles(url)
+
+쓰기:
+  crawler.py            save_articles()               — INSERT INTO articles
+  historical_crawler.py save_articles() 동일 계열
+  ingest_news_folder.py 로컬 파일 → articles 삽입
+
+읽기:
+  noun_extractor.py     process_articles()            — 미처리 기사 SELECT (LEFT JOIN article_nouns)
+  causal_extractor.py   process_articles_for_chains() — 미처리 기사 SELECT (LEFT JOIN causal_chains)
+  causal_extractor.py   _build_edge_rows(days)        — published_at 시간 필터 JOIN
+  graph_builder.py      build_cooccurrence()          — 전체 기사 스캔
+  api.py                /api/node/<id>                — 관련 기사 조회 (article_nouns JOIN)
+  api.py                /api/stats                    — COUNT(*)
+  api.py                /api/node-link/<a>/<b>        — 두 노드의 공동 기사 조회
+  compare_v1_v2.py      main()                        — 샘플 기사 5개 SELECT (causal_chains JOIN)
+
+주의:
+  - url 컬럼이 UNIQUE → 동일 URL 재수집 시 INSERT 무시됨
+  - body 는 NULL 허용이지만 causal_extractor, noun_extractor가
+    body 길이 > 100 조건을 사용하므로 빈 본문 기사는 처리 건너뜀
+  - published_at 형식이 달라지면 시간 필터(days 파라미터) 전체 영향
+
+
+────────────────────────────────────────────────────────────────────────────────
+2. article_nouns  (기사별 추출 명사 — 원본 불변 원칙)
+────────────────────────────────────────────────────────────────────────────────
+컬럼:
+  id          INTEGER  PRIMARY KEY AUTOINCREMENT
+  article_id  INTEGER  NOT NULL   FK → articles(id) ON DELETE CASCADE
+  noun        TEXT     NOT NULL   추출된 명사/개념 원문
+  position    TEXT     NOT NULL   'title' 또는 'body'
+
+인덱스:
+  idx_article_nouns_article  ON article_nouns(article_id)
+  idx_article_nouns_noun     ON article_nouns(noun)
+
+쓰기:
+  noun_extractor.py     process_articles()            — Gemini 개념 추출 결과 INSERT OR IGNORE
+  causal_extractor.py   process_articles_for_chains() — 체인 노드를 position='body'로 INSERT OR IGNORE
+  noun_extractor.py     reset_concepts()              — DELETE FROM article_nouns (초기화 시)
+
+읽기:
+  graph_builder.py      build_cooccurrence()          — 모든 명사 로드 → 공출현 그래프 구축
+  concept_normalizer.py self_map_all_unmapped()       — 매핑 안 된 noun 전체 SELECT
+  concept_normalizer.py normalize_with_gemini()       — Gemini 미처리 noun SELECT
+  concept_normalizer.py get_stats()                   — COUNT(DISTINCT noun)
+  api.py                /api/node/<id>                — 관련 기사 조회 시 JOIN
+  api.py                /api/stats                    — COUNT(DISTINCT noun)
+  api.py                /api/node-link/<a>/<b>        — 두 노드의 공동 기사 JOIN
+
+주의:
+  - 이 테이블은 절대 수정하지 않는다 (concept_normalizer 설계 철학)
+  - 동일 article_id + noun 조합은 INSERT OR IGNORE로 중복 방지
+  - noun에 '__processed__', '__none__' 같은 마커 문자열이 들어갈 수 있음
+    (GLOB '__*' 로 필터링)
+  - 체인 노드도 여기에 저장 → noun_extractor 별도 실행 없이도 그래프 구축 가능
+
+
+────────────────────────────────────────────────────────────────────────────────
+3. nodes  (공출현 그래프 노드 — 재생성 가능)
+────────────────────────────────────────────────────────────────────────────────
+컬럼:
+  id           INTEGER  PRIMARY KEY AUTOINCREMENT
+  noun         TEXT     UNIQUE NOT NULL   canonical 개념 (concept_normalizer 거친 후)
+  total_count  INTEGER  DEFAULT 0         전체 등장 기사 수
+  last_seen    TEXT                       마지막 등장 날짜
+
+인덱스:
+  idx_nodes_noun  ON nodes(noun)
+
+쓰기:
+  graph_builder.py  build_cooccurrence()  — DELETE FROM nodes / INSERT OR REPLACE
+  noun_extractor.py reset_concepts()     — DELETE FROM nodes
+
+읽기:
+  api.py            /api/graph           — SELECT id, noun, total_count
+  api.py            /api/node/<id>       — SELECT single node
+  api.py            /api/node-link/<a>/<b> — JOIN으로 엣지 조회 시 사용
+  api.py            /api/stats           — COUNT(*)
+  graph_builder.py  compute_centrality() — SELECT 전체 로드
+  graph_builder.py  find_path()          — SELECT 전체 로드
+
+주의:
+  - build_cooccurrence() 실행 시 DELETE → 재생성 (파괴적 갱신)
+  - noun은 concept_normalizer의 canonical 기준 (raw_noun 아님)
+  - reset_concepts()로 nodes/edges/article_nouns 동시 삭제됨
+
+
+────────────────────────────────────────────────────────────────────────────────
+4. edges  (공출현 그래프 엣지 — 재생성 가능)
+────────────────────────────────────────────────────────────────────────────────
+컬럼:
+  id            INTEGER  PRIMARY KEY AUTOINCREMENT
+  node_a        INTEGER  NOT NULL  FK → nodes(id)
+  node_b        INTEGER  NOT NULL  FK → nodes(id)
+  score         REAL     DEFAULT 0   IDF 가중 공출현 점수
+  article_count INTEGER  DEFAULT 0   함께 등장한 기사 수
+  last_seen     TEXT                 마지막 공출현 날짜
+  UNIQUE(node_a, node_b)
+
+인덱스:
+  idx_edges_nodes  ON edges(node_a, node_b)
+  idx_edges_score  ON edges(score)
+
+쓰기:
+  graph_builder.py  build_cooccurrence()  — DELETE FROM edges / INSERT OR REPLACE
+  noun_extractor.py reset_concepts()     — DELETE FROM edges
+
+읽기:
+  api.py            /api/graph           — SELECT edges (상위 score 기준 필터)
+  api.py            /api/node/<id>       — 인접 노드 조회
+  api.py            /api/node-link/<a>/<b> — 특정 두 노드 엣지 조회
+  graph_builder.py  compute_centrality() — SELECT 전체
+  graph_builder.py  find_path()          — SELECT 전체
+
+주의:
+  - node_a < node_b 방향 없는 쌍 (순서가 중요)
+  - build_cooccurrence()마다 완전 재계산됨
+  - causal_edges와 별개 (공출현 ≠ 인과)
+
+
+────────────────────────────────────────────────────────────────────────────────
+5. causal_edges  (인과 관계 엣지 — 방향 있음, 누적 보존)
+────────────────────────────────────────────────────────────────────────────────
+컬럼:
+  id                INTEGER  PRIMARY KEY AUTOINCREMENT
+  cause             TEXT     NOT NULL   원인 노드 명사 (최대 15자)
+  effect            TEXT     NOT NULL   결과 노드 명사 (최대 15자)
+  relation          TEXT                관계 설명 (15자 이내)
+  strength          INTEGER  DEFAULT 1  1=약, 2=중, 3=강
+  article_id        INTEGER             FK → articles(id)
+  category          TEXT                체인 카테고리 (실물경제/지정학 등 10종)
+  chain_text        TEXT                원본 체인 전체 "A → B → C" 형태
+  extractor_version TEXT     DEFAULT 'v1'  'v1' 또는 'v2'
+  created_at        TEXT     DEFAULT now()
+  UNIQUE(cause, effect, article_id)
+
+인덱스:
+  idx_causal_cause          ON causal_edges(cause)
+  idx_causal_effect         ON causal_edges(effect)
+  idx_causal_category       ON causal_edges(category)
+  idx_causal_edges_article  ON causal_edges(article_id)   ← 시간 JOIN 성능용
+
+쓰기:
+  causal_extractor.py  chains_to_edges()                — INSERT OR IGNORE (강화 시 strength UPDATE)
+
+읽기:
+  causal_extractor.py  _build_edge_rows(days)           — 시간 필터 JOIN (articles.published_at)
+  causal_extractor.py  get_impact_tree()                — BFS cause → effect 탐색
+  causal_extractor.py  get_causal_chain()               — 방향별 BFS 탐색
+  causal_extractor.py  get_multi_trigger_impacts()      — 멀티트리거 BFS
+  causal_routes.py     여러 API 엔드포인트              — 탐색 라우터 호출
+
+주의:
+  - UNIQUE(cause, effect, article_id) → 동일 기사의 동일 인과쌍 중복 방지
+  - extractor_version 없는 기존 행 = v1 (마이그레이션으로 DEFAULT 'v1' 적용됨)
+  - 이 테이블은 삭제하지 않고 누적 (재처리해도 기존 엣지 보존)
+  - cause/effect는 raw_noun 그대로 저장 (canonical로 치환 안 됨 — 변경 시 탐색 쿼리 영향 큼)
+
+
+────────────────────────────────────────────────────────────────────────────────
+6. causal_chains  (인과 체인 전체 원본 — 누적 보존)
+────────────────────────────────────────────────────────────────────────────────
+컬럼:
+  id                INTEGER  PRIMARY KEY AUTOINCREMENT
+  article_id        INTEGER             FK → articles(id)
+  category          TEXT     NOT NULL   체인 카테고리
+  chain_text        TEXT     NOT NULL   "A → B → C → D" 형태 문자열
+  confidence        INTEGER  DEFAULT 1  1=간접암시, 2=명시, 3=핵심인과
+  extractor_version TEXT     DEFAULT 'v1'
+  created_at        TEXT     DEFAULT now()
+  UNIQUE(chain_text, article_id)
+
+인덱스:
+  idx_chains_category        ON causal_chains(category)
+  idx_chains_article         ON causal_chains(article_id)
+  idx_causal_chains_article  ON causal_chains(article_id)  ← 신규체인 탐색 성능용
+
+쓰기:
+  causal_extractor.py  process_articles_for_chains()  — INSERT OR IGNORE (체인 저장)
+  causal_extractor.py  process_articles_for_chains()  — '__none__' 마커 INSERT (체인 없는 기사)
+
+읽기:
+  causal_extractor.py  process_articles_for_chains()  — 미처리 기사 판별 (SUBQUERY)
+  causal_extractor.py  get_top_chains(limit, days)    — 최다 등장 체인
+  causal_extractor.py  get_fresh_chains(days, limit)  — 최근 N일 신규 체인
+  causal_extractor.py  get_fading_chains()            — 최근엔 안 나오는 체인
+  causal_extractor.py  chains_to_training_data()      — JSONL 학습 데이터 생성
+  compare_v1_v2.py     _get_v1_chains()               — v1 체인 조회 (비교용)
+
+주의:
+  - chain_text = '__none__' 은 "이 기사엔 체인 없음" 마커 → 탐색 쿼리에서 WHERE chain_text != '__none__'
+  - extractor_version으로 v1/v2 구분 → 비교·분석 시 WHERE 절로 필터
+  - 이 테이블도 삭제하지 않고 누적
+  - UNIQUE(chain_text, article_id) → 동일 기사에서 동일 체인 중복 방지
+
+
+────────────────────────────────────────────────────────────────────────────────
+7. concepts  (정규화된 표준 개념 레지스트리)
+────────────────────────────────────────────────────────────────────────────────
+컬럼:
+  id         INTEGER  PRIMARY KEY AUTOINCREMENT
+  canonical  TEXT     UNIQUE NOT NULL   대표 표현 (2~12자 권장)
+  category   TEXT                       개념 카테고리 (선택)
+  created_at TEXT     DEFAULT now()
+
+쓰기:
+  concept_normalizer.py  _upsert_canonical()         — INSERT OR IGNORE
+  concept_normalizer.py  self_map_all_unmapped()     — 1:1 자기매핑 시 canonical 등록
+  concept_normalizer.py  normalize_with_gemini()     — Gemini 그룹핑 후 canonical 등록
+
+읽기:
+  concept_normalizer.py  load_alias_map()            — JOIN concepts → {raw: canonical} dict
+  concept_normalizer.py  get_canonical()             — 단일 조회
+  concept_normalizer.py  get_raw_nouns_for_canonical() — 역방향 조회
+  concept_normalizer.py  get_stats()                 — COUNT(*)
+  graph_builder.py       build_cooccurrence()        — load_alias_map() 통해 간접 사용
+
+주의:
+  - 이 테이블은 graph_builder의 nodes 테이블과 다름
+    (concepts = 정규화 레지스트리, nodes = 공출현 그래프 노드)
+  - canonical이 바뀌면 concept_aliases도 함께 수정해야 함
+
+
+────────────────────────────────────────────────────────────────────────────────
+8. concept_aliases  (raw_noun → canonical 매핑)
+────────────────────────────────────────────────────────────────────────────────
+컬럼:
+  id          INTEGER  PRIMARY KEY AUTOINCREMENT
+  raw_noun    TEXT     UNIQUE NOT NULL   원본 명사 (article_nouns.noun)
+  concept_id  INTEGER  NOT NULL          FK → concepts(id)
+  method      TEXT     DEFAULT 'exact'   'self' / 'gemini' / 'exact'
+  created_at  TEXT     DEFAULT now()
+
+인덱스:
+  idx_aliases_raw      ON concept_aliases(raw_noun)
+  idx_aliases_concept  ON concept_aliases(concept_id)
+
+쓰기:
+  concept_normalizer.py  _upsert_alias()             — INSERT OR IGNORE
+  concept_normalizer.py  normalize_with_gemini()     — INSERT OR REPLACE (self → gemini 업그레이드)
+
+읽기:
+  concept_normalizer.py  load_alias_map()            — 전체 로드
+  concept_normalizer.py  get_canonical()             — 단일 raw_noun 조회
+  concept_normalizer.py  get_raw_nouns_for_canonical() — canonical 역방향 조회
+  concept_normalizer.py  self_map_all_unmapped()     — 아직 없는 raw_noun 체크
+  concept_normalizer.py  normalize_with_gemini()     — method='gemini' 미처리 체크
+
+주의:
+  - raw_noun UNIQUE → 한 raw_noun은 하나의 canonical에만 매핑
+  - self → gemini 업그레이드는 INSERT OR REPLACE 사용 (기존 행 교체)
+  - method='self': Gemini 없이 자기 자신으로 1:1 매핑 (임시)
+  - method='gemini': Gemini가 유사 개념 통합 완료 (최종)
+
+
+────────────────────────────────────────────────────────────────────────────────
+9. price_data  (자산 가격 이력)
+────────────────────────────────────────────────────────────────────────────────
+컬럼:
+  id          INTEGER  PRIMARY KEY AUTOINCREMENT
+  ticker      TEXT     NOT NULL   자산 심볼 (예: "GC=F", "CL=F")
+  asset_name  TEXT     NOT NULL   자산 이름 (예: "금", "WTI원유")
+  date        TEXT     NOT NULL   날짜 (YYYY-MM-DD)
+  close_price REAL                종가
+  UNIQUE(ticker, date)
+
+쓰기:
+  price_engine.py  fetch_prices()           — yfinance → INSERT OR REPLACE
+
+읽기:
+  price_engine.py  detect_mention_spikes()  — 언급 급증 전후 수익률 계산
+  api.py           /api/price/<noun>        — 특정 자산 가격 시계열 조회
+
+주의:
+  - UNIQUE(ticker, date) → 같은 날짜 재수집 시 덮어쓰기 (OR REPLACE)
+  - close_price NULL 허용 (수집 실패 날짜 존재 가능)
+  - ticker 목록은 price_engine.py의 ASSET_NODES dict에 하드코딩됨
+    → 새 자산 추가 시 ASSET_NODES만 수정하면 됨 (스키마 변경 불필요)
+
+
+────────────────────────────────────────────────────────────────────────────────
+10. mention_spikes  (언급 급증 이벤트)
+────────────────────────────────────────────────────────────────────────────────
+컬럼:
+  id             INTEGER  PRIMARY KEY AUTOINCREMENT
+  noun           TEXT     NOT NULL   급증한 개념어
+  spike_date     TEXT     NOT NULL   급증 감지 날짜
+  mention_count  INTEGER             해당 날 언급 수
+  prev_avg_count REAL                이전 평균 언급 수
+  return_1d      REAL                급증 다음날 수익률
+  return_7d      REAL                급증 7일 후 수익률
+  return_30d     REAL                급증 30일 후 수익률
+  UNIQUE(noun, spike_date)
+
+쓰기:
+  price_engine.py  detect_mention_spikes()   — INSERT OR REPLACE
+
+읽기:
+  price_engine.py  get_spike_history()       — 특정 noun의 스파이크 이력
+  api.py           /api/price/<noun>         — 스파이크 이력 포함 응답
+
+주의:
+  - UNIQUE(noun, spike_date) → 같은 날 재계산 시 덮어쓰기
+  - return_* 컬럼은 price_data가 있어야 계산됨 (없으면 NULL)
+  - noun은 price_engine.ASSET_NODES의 asset_name 값과 매칭됨
+
+
+================================================================================
+  파일별 DB 의존성 요약
+================================================================================
+
+파일                     읽기 테이블                           쓰기 테이블
+────────────────────────────────────────────────────────────────────────────────
+crawler.py               articles (중복 체크)                  articles
+historical_crawler.py    articles (중복 체크)                  articles
+ingest_news_folder.py    -                                     articles
+
+noun_extractor.py        articles, article_nouns              article_nouns
+                                                               nodes, edges (reset 시)
+
+graph_builder.py         articles, article_nouns,             nodes, edges
+                         concept_aliases(간접)
+
+concept_normalizer.py    article_nouns,                       concepts,
+                         concept_aliases, concepts             concept_aliases
+
+causal_extractor.py      articles, causal_chains,             causal_chains,
+                         causal_edges                         causal_edges,
+                                                               article_nouns
+
+price_engine.py          price_data, article_nouns            price_data,
+                         (mention 집계 시)                      mention_spikes
+
+api.py                   articles, article_nouns,             (직접 쓰기 없음,
+                         nodes, edges, causal_chains,          각 모듈 함수 호출)
+                         causal_edges, price_data,
+                         mention_spikes, concepts,
+                         concept_aliases
+
+causal_routes.py         causal_edges, causal_chains          (없음 — 읽기 전용)
+
+compare_v1_v2.py         articles, causal_chains              (없음 — 비교만)
+
+database.py              (스키마 정의 및 마이그레이션 전담)
+
+
+================================================================================
+  스키마 변경 시 체크리스트
+================================================================================
+
+컬럼 추가:
+  1. database.py _migrate() 에 ALTER TABLE ADD COLUMN 추가 (idempotent)
+  2. database.py init_db() CREATE TABLE 에도 추가
+  3. 위 "파일별 의존성 요약"에서 해당 테이블을 읽는 모든 파일 확인 후 수정
+  4. 이 파일(DB_STRUCTURE.txt) 업데이트
+
+컬럼 삭제 / 이름 변경:
+  SQLite는 ALTER TABLE DROP COLUMN 미지원 (3.35+ 이상만 가능)
+  → 실질적으로는 새 테이블 생성 + 데이터 복사 + 테이블 교체 방식 필요
+  → 매우 위험. 반드시 results_v1/ 방식으로 DB 스냅샷 백업 후 진행
+
+테이블 추가:
+  1. database.py init_db() executescript 에 CREATE TABLE IF NOT EXISTS 추가
+  2. 필요 시 _migrate() 에도 추가 (기존 DB 호환)
+  3. 이 파일(DB_STRUCTURE.txt) 업데이트
+
+데이터 초기화 (주의: 복구 불가):
+  - nodes / edges만: noun_extractor.reset_concepts() 또는 graph_builder.build_cooccurrence()
+  - article_nouns 포함: noun_extractor.reset_concepts()
+  - causal_chains / causal_edges: 현재 자동 초기화 함수 없음 → 직접 SQL 필요
+  - 전체 초기화: DB 파일 삭제 후 database.py init_db() 재실행
+
+================================================================================

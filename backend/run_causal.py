@@ -134,12 +134,15 @@ def main():
         return
 
     # ── 루프 ──────────────────────────────────────────────────────
-    total_processed = 0
-    total_chains    = 0
-    total_edges     = 0
-    total_nouns     = 0
-    batch_num       = 0
-    start_time      = time.time()
+    total_processed      = 0
+    total_chains         = 0
+    total_edges          = 0
+    total_new_edges      = 0   # 그래프에 처음 추가된 연결
+    total_reinforced     = 0   # 기존 연결에 증거 누적
+    total_new_nodes      = 0   # 처음 등장한 개념 노드
+    total_nouns          = 0
+    batch_num            = 0
+    start_time           = time.time()
 
     while not _stop_requested:
         today_remaining = DAILY_LIMIT - today_used
@@ -161,24 +164,30 @@ def main():
             rate_limit_sec=RATE_LIMIT_SEC,
         )
 
-        processed_now = result.get("processed", 0)
-        chains_now    = result.get("chains_saved", 0)
-        edges_now     = result.get("edges_saved", 0)
-        nouns_now     = result.get("nouns_saved", 0)
-        remaining_now = result.get("remaining", 0)
+        processed_now  = result.get("processed", 0)
+        chains_now     = result.get("chains_saved", 0)
+        edges_now      = result.get("edges_saved", 0)
+        new_edges_now  = result.get("new_edges", 0)
+        reinf_now      = result.get("reinforced_edges", 0)
+        new_nodes_now  = result.get("new_nodes", 0)
+        nouns_now      = result.get("nouns_saved", 0)
+        remaining_now  = result.get("remaining", 0)
 
-        total_processed += processed_now
-        total_chains    += chains_now
-        total_edges     += edges_now
-        total_nouns     += nouns_now
-        today_used      += processed_now
+        total_processed  += processed_now
+        total_chains     += chains_now
+        total_edges      += edges_now
+        total_new_edges  += new_edges_now
+        total_reinforced += reinf_now
+        total_new_nodes  += new_nodes_now
+        total_nouns      += nouns_now
+        today_used       += processed_now
 
         # 카운터 즉시 저장 (Ctrl+C 후에도 유지)
         counter["count"] = today_used
         _save_counter(counter)
 
-        print(f"  → 처리: {processed_now}개 | 체인: {chains_now}개 | "
-              f"엣지: {edges_now}개 | 개념: {nouns_now}개")
+        print(f"  → 처리: {processed_now}개 | 체인: {chains_now}개")
+        print(f"     신규 연결: {new_edges_now}개  |  기존 강화: {reinf_now}개  |  첫 등장 개념: {new_nodes_now}개")
         print(f"  → 오늘 누적: {today_used} / {DAILY_LIMIT}  |  미처리 잔여: {remaining_now}개")
 
         # 처리할 기사 없음 → 종료
@@ -198,17 +207,38 @@ def main():
     elapsed_total = int(time.time() - start_time)
     final_stats   = _get_db_stats()
 
+    # ── 최신 신호 요약 (신규 체인 / 식어가는 체인) ────────────────
+    try:
+        from causal_extractor import get_fresh_chains, get_fading_chains
+        fresh  = get_fresh_chains(days=7, limit=5)
+        fading = get_fading_chains(active_days=14, fade_days=60, limit=5)
+    except Exception:
+        fresh  = []
+        fading = []
+
     print("\n" + "=" * 58)
     print("  이번 실행 결과")
     print("=" * 58)
     print(f"  처리한 기사  : {total_processed}개")
     print(f"  저장된 체인  : {total_chains}개")
-    print(f"  저장된 엣지  : {total_edges}개")
-    print(f"  저장된 개념  : {total_nouns}개")
+    print(f"  ┌ 신규 연결  : {total_new_edges}개  ← 그래프에 처음 추가된 경로")
+    print(f"  └ 기존 강화  : {total_reinforced}개  ← 이미 있던 연결에 증거 누적")
+    print(f"  첫 등장 개념 : {total_new_nodes}개")
     print(f"  소요 시간    : {elapsed_total//60}분 {elapsed_total%60}초")
     print(f"  오늘 총 사용 : {today_used} / {DAILY_LIMIT}")
     print(f"  [DB 누적 현황]")
     print(f"    체인 : {final_stats['chains']:,}개  |  엣지 : {final_stats['edges']:,}개  |  개념 : {final_stats['nouns']:,}개")
+
+    if fresh:
+        print(f"\n  [최근 7일 신규 패턴 TOP {len(fresh)}]")
+        for c in fresh:
+            print(f"    [{c['category']}] {c['chain_text']}")
+
+    if fading:
+        print(f"\n  [2주째 언급 없는 패턴 (소멸 중) TOP {len(fading)}]")
+        for c in fading:
+            print(f"    [{c['category']}] {c['chain_text']}  (마지막: {c['last_seen'][:10]})")
+
     print("=" * 58)
     print("\n  재실행하면 이어서 진행됩니다.")
 
