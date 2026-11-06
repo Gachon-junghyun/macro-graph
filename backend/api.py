@@ -13,7 +13,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY") # "AIzaSyD9fumUwerjowsFrEb1Q26iatFsVnFchJU"
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
 
 from database import init_db, get_db
